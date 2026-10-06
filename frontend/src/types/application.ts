@@ -38,11 +38,17 @@ export interface Interview {
   notes?: string
 }
 
-/** A resume file stored in S3 (real app) or simulated (demo). Added in Phase 6. */
-export interface ResumeFile {
+/** The two kinds of document an application can have attached. */
+export const DOCUMENT_KINDS = ['resume', 'coverLetter'] as const
+export type DocumentKind = (typeof DOCUMENT_KINDS)[number]
+
+/** A file attached to an application: in S3 (real app, Phase 6) or in browser memory (demo). */
+export interface StoredFile {
   fileName: string
-  /** S3 object key, e.g. "users/<id>/resumes/<uuid>.pdf" */
+  /** Where the file lives. In S3 this is the object key, e.g. "users/<id>/<app-id>/resume/<uuid>". */
   key: string
+  /** Size in bytes. */
+  size: number
   uploadedAt: string
 }
 
@@ -61,8 +67,11 @@ export interface JobApplication {
   jobUrl?: string
   /** A label like "SWE v3 – backend focus". */
   resumeVersion?: string
-  resumeFile?: ResumeFile
+  resumeFile?: StoredFile
+  coverLetterFile?: StoredFile
   interviews: Interview[]
+  /** Folder names, like Gmail labels: an application can be in several. `string[]` = a list of strings. */
+  folders: string[]
   notes: string
   createdAt: string
   updatedAt: string

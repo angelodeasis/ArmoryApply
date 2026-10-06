@@ -1,0 +1,23 @@
+{
+  "name": "armoryapply-infra",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "synth": "cdk synth",
+    "diff": "cdk diff",
+    "build:frontend": "npm --prefix ../frontend run build",
+    "deploy": "npm run build:frontend && cdk deploy"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.272.0",
+    "constructs": "^10.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "aws-cdk": "^2.1144.0",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0"
+  }
+}

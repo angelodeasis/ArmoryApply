@@ -29,3 +29,6 @@ cdk.out
 # Local env files
 .env
 .env.*
+
+# Personal developer notes (local only)
+DEV_GUIDE.md
