@@ -6,7 +6,7 @@ infrastructure as code.
 
 **Live demo:** https://d1iqw1qv83zyx7.cloudfront.net/demo (sample data, no account needed)
 
-![ArmoryApply](frontend/public/og-image.png)
+![ArmoryApply dashboard](docs/screenshots/dashboard.png)
 
 ## What it does
 
@@ -27,6 +27,16 @@ The app has two halves that share the same UI:
 
 Pages talk to a `DataSource` interface; `DemoDataSource` and `ApiDataSource` implement it, so the UI never knows
 which one it's using.
+
+## Screenshots
+
+| Import from link | Application details |
+|---|---|
+| ![Pasting a Greenhouse link fills in the form](docs/screenshots/import-from-link.png) | ![Details, documents, and interview timeline](docs/screenshots/application-detail.png) |
+| **Applications** | **Landing page** |
+| ![Filterable list of applications](docs/screenshots/applications.png) | ![Landing page](docs/screenshots/landing.png) |
+
+<p align="center"><img src="docs/screenshots/mobile-dashboard.png" alt="Dashboard on a phone" width="260"></p>
 
 ## Architecture
 

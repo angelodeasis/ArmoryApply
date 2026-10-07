@@ -111,12 +111,14 @@ function AccountMenu() {
   const auth = useAuth()
   return (
     <>
+      {/* Phones show a short "Account"; wider screens show my email. Same link. */}
       <NavLink
         to="/app/account"
-        className="hidden text-sm text-slate-600 hover:text-slate-900 sm:inline"
+        className="text-sm font-medium text-slate-600 hover:text-slate-900"
         title="Account"
       >
-        {String(auth.user?.profile.email ?? 'Account')}
+        <span className="sm:hidden">Account</span>
+        <span className="hidden sm:inline">{String(auth.user?.profile.email ?? 'Account')}</span>
       </NavLink>
       <button type="button" className="btn btn-secondary" onClick={() => void signOut(auth)}>
         Sign out
