@@ -24,6 +24,42 @@ import type { Construct } from 'constructs'
 export interface SiteStackProps extends StackProps {
   /** Absolute path to the built frontend (frontend/dist). */
   siteDir: string
+  /** Outside addresses the private app talks to, allowed by the security policy below. */
+  backend: {
+    apiUrl: string
+    cognitoRegion: string
+    loginDomain: string
+    documentsBucket: string
+  }
+}
+
+/**
+ * Content-Security-Policy: a list of where the site may load code, styles,
+ * frames and data from. If an attacker ever slipped a <script> into a page,
+ * the browser would refuse to run it unless it came from an allowed source.
+ */
+function contentSecurityPolicy({ apiUrl, cognitoRegion, loginDomain, documentsBucket }: SiteStackProps['backend']) {
+  // Presigned S3 links can use either form of the bucket's address.
+  const s3 = `https://${documentsBucket}.s3.amazonaws.com https://${documentsBucket}.s3.${cognitoRegion}.amazonaws.com`
+  return [
+    "default-src 'self'",
+    "script-src 'self'", // only my own bundled JavaScript; no inline or third-party scripts
+    // 'unsafe-inline' styles: React's style={{...}} bars and the Word previewer's
+    // generated <style>. Styles can't run code, so this is the usual trade-off.
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    // fetch() targets: my API, Cognito (sign-in + token refresh), S3 (uploads, Word preview).
+    `connect-src 'self' ${apiUrl.replace(/\/$/, '')} https://cognito-idp.${cognitoRegion}.amazonaws.com https://${loginDomain} ${s3}`,
+    // PDF viewer iframes: demo samples ('self'), demo uploads (blob:), real files (S3).
+    `frame-src 'self' blob: ${s3}`,
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    // Only my own pages may show my pages in a frame (stops "clickjacking" by
+    // other sites). Not 'none': the demo shows its sample PDFs in a frame.
+    "frame-ancestors 'self'",
+  ].join('; ')
 }
 
 export class SiteStack extends Stack {
@@ -45,6 +81,26 @@ export class SiteStack extends Stack {
       autoDeleteObjects: true,
     })
 
+    // Security headers added to every response (free). Same as AWS's managed
+    // SECURITY_HEADERS policy, plus a Content-Security-Policy and Permissions-Policy.
+    const securityHeaders = new cloudfront.ResponseHeadersPolicy(this, 'SecurityHeaders', {
+      responseHeadersPolicyName: 'armoryapply-security-headers',
+      securityHeadersBehavior: {
+        contentSecurityPolicy: { contentSecurityPolicy: contentSecurityPolicy(props.backend), override: true },
+        // Always use HTTPS for 2 years, even if someone types http://
+        strictTransportSecurity: { accessControlMaxAge: Duration.days(730), includeSubdomains: true, override: true },
+        contentTypeOptions: { override: true }, // nosniff: don't guess file types
+        frameOptions: { frameOption: cloudfront.HeadersFrameOption.SAMEORIGIN, override: true },
+        referrerPolicy: { referrerPolicy: cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN, override: true },
+      },
+      customHeadersBehavior: {
+        customHeaders: [
+          // The site never needs the camera, microphone, location, etc.
+          { header: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=()', override: true },
+        ],
+      },
+    })
+
     const distribution = new cloudfront.Distribution(this, 'SiteDistribution', {
       comment: 'ArmoryApply website',
       defaultRootObject: 'index.html',
@@ -54,9 +110,7 @@ export class SiteStack extends Stack {
         origin: S3BucketOrigin.withOriginAccessControl(bucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
-        // AWS-managed set of standard security headers (HSTS, nosniff,
-        // frame-options, referrer-policy). Free.
-        responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.SECURITY_HEADERS,
+        responseHeadersPolicy: securityHeaders,
         compress: true,
       },
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
