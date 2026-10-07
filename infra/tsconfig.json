@@ -12,5 +12,5 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["bin", "lib"]
+  "include": ["bin", "lib", "lambda"]
 }

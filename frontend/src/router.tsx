@@ -10,8 +10,8 @@ import { LandingPage } from './pages/LandingPage'
 import { NotFoundPage } from './pages/SimplePages'
 import { PrivateAppRoute } from './private/PrivateAppRoute'
 
-// URL -> page map. The /demo branch and (in Phase 4–5) the /app branch use
-// the SAME pages; only the DataSource handed to them differs.
+// URL -> page map. The /demo branch (here) and the /app branch (private/PrivateApp.tsx)
+// use the SAME pages; only the DataSource handed to them differs.
 
 const demoSource = new DemoDataSource()
 

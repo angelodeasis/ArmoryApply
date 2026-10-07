@@ -1,10 +1,18 @@
+import { User } from 'oidc-client-ts'
 import { useEffect, type ReactNode } from 'react'
 import { AuthProvider, useAuth } from 'react-oidc-context'
-import { Link, Navigate, Route, Routes, useLocation } from 'react-router'
+import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router'
 import { Logo } from '../components/Logo'
-import { authConfig, isAuthConfigured } from '../config'
-import { PrivateHomePage } from './PrivateHomePage'
-import { isSigningOut } from './signOut'
+import { apiConfig, authConfig, isAuthConfigured } from '../config'
+import { ApiDataSource } from '../data/ApiDataSource'
+import { DataSourceProvider } from '../data/DataSourceContext'
+import { AppLayout } from '../layouts/AppLayout'
+import { ApplicationDetailPage } from '../pages/ApplicationDetailPage'
+import { ApplicationFormPage } from '../pages/ApplicationFormPage'
+import { ApplicationsPage } from '../pages/ApplicationsPage'
+import { DashboardPage } from '../pages/DashboardPage'
+import { AccountPage } from './AccountPage'
+import { isSigningOut, signOut } from './signOut'
 
 // Everything under /app. This file (and the sign-in libraries) is split into
 // its own download that only loads when someone visits /app, so the public
@@ -30,6 +38,17 @@ const oidcConfig = {
   onSigninCallback: () => window.history.replaceState({}, document.title, window.location.pathname),
 }
 
+// The tokens live in this tab's sessionStorage under this key (the library's
+// naming). Reading them at request time means the API always gets the latest
+// token, even right after a background refresh.
+function getAccessToken(): string | undefined {
+  const stored = sessionStorage.getItem(`oidc.user:${oidcConfig.authority}:${oidcConfig.client_id}`)
+  return stored ? User.fromStorageString(stored).access_token : undefined
+}
+
+// Same pages as the demo; only the data source differs (see router.tsx).
+const apiSource = new ApiDataSource(apiConfig.url, getAccessToken)
+
 function AuthMessage({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 text-slate-900">
@@ -42,6 +61,28 @@ function AuthMessage({ title, children }: { title: string; children?: ReactNode 
   )
 }
 
+/** Shown only if sign-in fails, with a way out. */
+function SignInProblem({ message, returnTo }: { message: string; returnTo: string }) {
+  const auth = useAuth()
+  return (
+    <AuthMessage title="Sign-in problem">
+      <p>{message}</p>
+      <div className="mt-6 flex justify-center gap-3">
+        <Link to="/" className="btn btn-secondary">
+          Home
+        </Link>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => void auth.signinRedirect({ state: { returnTo }, redirectMethod: 'replace' })}
+        >
+          Try again
+        </button>
+      </div>
+    </AuthMessage>
+  )
+}
+
 /** Shows its children only when signed in; otherwise sends me to Cognito. */
 function RequireAuth({ children }: { children: ReactNode }) {
   const auth = useAuth()
@@ -50,27 +91,20 @@ function RequireAuth({ children }: { children: ReactNode }) {
     !auth.isLoading && !auth.isAuthenticated && !auth.activeNavigator && !auth.error && !isSigningOut()
 
   useEffect(() => {
-    // `state` rides along through Cognito and comes back after sign-in,
-    // so I land on the page I originally asked for.
-    if (mustSignIn) void auth.signinRedirect({ state: { returnTo: location.pathname } })
+    if (!mustSignIn) return
+    void auth.signinRedirect({
+      // `state` rides along through Cognito and comes back after sign-in,
+      // so I land on the page I originally asked for.
+      state: { returnTo: location.pathname },
+      // "replace" swaps /app out of the browser history for Cognito's page,
+      // so Back on the sign-in page returns to where I came from (e.g. the
+      // landing page) instead of /app, which would just redirect again.
+      redirectMethod: 'replace',
+    })
   }, [mustSignIn, auth, location.pathname])
 
-  if (auth.error) {
-    return (
-      <AuthMessage title="Sign-in problem">
-        <p>{auth.error.message}</p>
-        <div className="mt-6 flex justify-center gap-3">
-          <Link to="/" className="btn btn-secondary">
-            Home
-          </Link>
-          <button type="button" className="btn btn-primary" onClick={() => void auth.signinRedirect()}>
-            Try again
-          </button>
-        </div>
-      </AuthMessage>
-    )
-  }
   if (isSigningOut()) return <AuthMessage title="Signing out…" />
+  if (auth.error) return <SignInProblem message={auth.error.message} returnTo={location.pathname} />
   if (!auth.isAuthenticated) return <AuthMessage title="Redirecting to sign in…" />
   return children
 }
@@ -85,11 +119,30 @@ function AuthCallback() {
   return <Navigate to={returnTo} replace />
 }
 
+/** Header extras for the private app: Account link + Sign out. */
+function AccountMenu() {
+  const auth = useAuth()
+  return (
+    <>
+      <NavLink
+        to="/app/account"
+        className="hidden text-sm text-slate-600 hover:text-slate-900 sm:inline"
+        title="Account"
+      >
+        {String(auth.user?.profile.email ?? 'Account')}
+      </NavLink>
+      <button type="button" className="btn btn-secondary" onClick={() => void signOut(auth)}>
+        Sign out
+      </button>
+    </>
+  )
+}
+
 export default function PrivateApp() {
-  if (!isAuthConfigured) {
+  if (!isAuthConfigured || !apiConfig.url) {
     return (
       <AuthMessage title="Private app not configured yet">
-        Deploy the <code>ArmoryApply-Backend</code> stack and fill in <code>src/config.ts</code>.
+        Deploy the <code>ArmoryApply-Backend</code> stack and copy its outputs into <code>src/config.ts</code>.
       </AuthMessage>
     )
   }
@@ -98,13 +151,22 @@ export default function PrivateApp() {
       <Routes>
         <Route path="callback" element={<AuthCallback />} />
         <Route
-          path="*"
           element={
             <RequireAuth>
-              <PrivateHomePage />
+              <DataSourceProvider source={apiSource} basePath="/app">
+                <AppLayout account={<AccountMenu />} />
+              </DataSourceProvider>
             </RequireAuth>
           }
-        />
+        >
+          <Route index element={<DashboardPage />} />
+          <Route path="applications" element={<ApplicationsPage />} />
+          <Route path="applications/:id" element={<ApplicationDetailPage />} />
+          <Route path="applications/:id/edit" element={<ApplicationFormPage />} />
+          <Route path="new" element={<ApplicationFormPage />} />
+          <Route path="account" element={<AccountPage />} />
+          <Route path="*" element={<AuthMessage title="Page not found" />} />
+        </Route>
       </Routes>
     </AuthProvider>
   )

@@ -1,9 +1,19 @@
 import { CfnOutput, Duration, RemovalPolicy, Stack, type StackProps } from 'aws-cdk-lib'
+import { CorsHttpMethod, HttpApi, HttpMethod, HttpStage } from 'aws-cdk-lib/aws-apigatewayv2'
+import { HttpUserPoolAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers'
+import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations'
 import * as cognito from 'aws-cdk-lib/aws-cognito'
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
+import * as lambda from 'aws-cdk-lib/aws-lambda'
+import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs'
+import * as logs from 'aws-cdk-lib/aws-logs'
 import type { Construct } from 'constructs'
+import { fileURLToPath } from 'node:url'
 
-// The private side of ArmoryApply. Phase 4: sign-in (Cognito).
-// Phases 5–6 add the API, database, and file storage to this same stack.
+// The private side of ArmoryApply.
+//   Phase 4: sign-in (Cognito)
+//   Phase 5: the API (API Gateway → Lambda) and database (DynamoDB)
+//   Phase 6 adds file storage to this same stack.
 //
 // Cognito concepts:
 //   - User pool: the directory of people who can sign in (just me).
@@ -94,10 +104,92 @@ export class BackendStack extends Stack {
       useCognitoProvidedValues: true,
     })
 
+    // ---------------------------------------------------------------- Phase 5
+
+    // DynamoDB: the database. "On-demand" billing = pay per request, with no
+    // servers to size; a personal tracker's traffic costs a fraction of a cent.
+    // Layout and keys are explained in lambda/api.ts.
+    const table = new dynamodb.TableV2(this, 'DataTable', {
+      tableName: 'armoryapply-data',
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+      billing: dynamodb.Billing.onDemand(),
+      // Lets me restore the table to any second in the last 35 days ("undo"
+      // for the whole database). Costs about $0.20/GB-month; my data is KBs.
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      // My real data: block deletion, and keep the table even if the stack is deleted.
+      deletionProtection: true,
+      removalPolicy: RemovalPolicy.RETAIN,
+    })
+
+    // Lambda: the code that runs for each API request (lambda/api.ts).
+    // NodejsFunction bundles the TypeScript into one small JavaScript file
+    // with esbuild during `cdk deploy`.
+    const apiFunction = new NodejsFunction(this, 'ApiFunction', {
+      functionName: 'armoryapply-api',
+      entry: fileURLToPath(new URL('../lambda/api.ts', import.meta.url)),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_24_X,
+      // Graviton (ARM) processors: ~20% cheaper than x86 for the same work.
+      architecture: lambda.Architecture.ARM_64,
+      memorySize: 256,
+      timeout: Duration.seconds(10),
+      environment: { TABLE_NAME: table.tableName },
+      bundling: { minify: true, sourceMap: true },
+      // Logs (console.log/console.error) go here and are deleted after a month.
+      logGroup: new logs.LogGroup(this, 'ApiFunctionLogs', {
+        logGroupName: '/aws/lambda/armoryapply-api',
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
+    })
+    // Least privilege: this function may read/write THIS table and nothing else.
+    table.grantReadWriteData(apiFunction)
+
+    // API Gateway (HTTP API): the public front door to the function.
+    const api = new HttpApi(this, 'Api', {
+      apiName: 'armoryapply-api',
+      // Browsers block a site from calling a different domain unless that
+      // domain says it's OK. This is that "OK" (CORS), for my site only.
+      corsPreflight: {
+        allowOrigins: [props.siteUrl, LOCAL_DEV_URL],
+        allowMethods: [CorsHttpMethod.GET, CorsHttpMethod.POST, CorsHttpMethod.PUT, CorsHttpMethod.DELETE],
+        allowHeaders: ['authorization', 'content-type'],
+        maxAge: Duration.hours(1),
+      },
+      createDefaultStage: false,
+    })
+
+    // Rate limit: past ~10 requests/second, extra requests get "429 Too Many
+    // Requests" instead of running Lambda. Caps cost even if a token leaked.
+    const stage = new HttpStage(this, 'ApiStage', {
+      httpApi: api,
+      stageName: '$default',
+      autoDeploy: true,
+      throttle: { rateLimit: 10, burstLimit: 20 },
+    })
+
+    // The bouncer at the door: every route requires a valid Cognito access
+    // token issued to MY app client. API Gateway checks it before Lambda runs.
+    const authorizer = new HttpUserPoolAuthorizer('CognitoAuthorizer', userPool, {
+      userPoolClients: [client],
+    })
+    const integration = new HttpLambdaIntegration('ApiIntegration', apiFunction)
+    const routes: [HttpMethod, string][] = [
+      [HttpMethod.GET, '/applications'],
+      [HttpMethod.POST, '/applications'],
+      [HttpMethod.PUT, '/applications/{id}'],
+      [HttpMethod.DELETE, '/applications/{id}'],
+    ]
+    for (const [method, path] of routes) {
+      api.addRoutes({ path, methods: [method], integration, authorizer })
+    }
+
     // These values are not secrets: they end up in the website's code anyway.
     new CfnOutput(this, 'Region', { value: this.region })
     new CfnOutput(this, 'UserPoolId', { value: userPool.userPoolId })
     new CfnOutput(this, 'UserPoolClientId', { value: client.userPoolClientId })
     new CfnOutput(this, 'LoginDomain', { value: `${domain.domainName}.auth.${this.region}.amazoncognito.com` })
+    new CfnOutput(this, 'ApiUrl', { value: stage.url })
   }
 }

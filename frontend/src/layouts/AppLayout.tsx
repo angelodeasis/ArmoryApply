@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Link, NavLink, Outlet, ScrollRestoration } from 'react-router'
 import { Logo } from '../components/Logo'
 import { DemoDataSource } from '../data/DemoDataSource'
@@ -5,6 +6,7 @@ import { useDataSource } from '../data/useDataSource'
 import { useResetCache } from '../data/queries'
 
 // The frame around every page: demo banner (demo only), header, nav.
+// The private app passes `account` (my email + Sign out) to show in the header.
 // <Outlet /> is where React Router renders the current page.
 
 function navClass({ isActive }: { isActive: boolean }) {
@@ -37,7 +39,7 @@ function DemoBanner({ source }: { source: DemoDataSource }) {
   )
 }
 
-export function AppLayout() {
+export function AppLayout({ account }: { account?: ReactNode }) {
   const { source, basePath } = useDataSource()
 
   return (
@@ -60,9 +62,12 @@ export function AppLayout() {
               Applications
             </NavLink>
           </nav>
-          <Link to={`${basePath}/new`} className="btn btn-primary ml-auto">
-            + New application
-          </Link>
+          <div className="ml-auto flex items-center gap-3">
+            <Link to={`${basePath}/new`} className="btn btn-primary">
+              + New application
+            </Link>
+            {account}
+          </div>
         </div>
       </header>
 

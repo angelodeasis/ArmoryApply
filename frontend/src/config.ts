@@ -9,4 +9,9 @@ export const authConfig = {
   loginDomain: 'armoryapply-182613.auth.us-east-1.amazoncognito.com',
 }
 
+/** The API's address: the Backend stack's `ApiUrl` output (Phase 5). */
+export const apiConfig = {
+  url: 'https://vlf1iqac1b.execute-api.us-east-1.amazonaws.com',
+}
+
 export const isAuthConfigured = Boolean(authConfig.userPoolId && authConfig.clientId && authConfig.loginDomain)
