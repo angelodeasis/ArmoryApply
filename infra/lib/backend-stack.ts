@@ -7,13 +7,14 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
 import * as lambda from 'aws-cdk-lib/aws-lambda'
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs'
 import * as logs from 'aws-cdk-lib/aws-logs'
+import * as s3 from 'aws-cdk-lib/aws-s3'
 import type { Construct } from 'constructs'
 import { fileURLToPath } from 'node:url'
 
 // The private side of ArmoryApply.
 //   Phase 4: sign-in (Cognito)
 //   Phase 5: the API (API Gateway → Lambda) and database (DynamoDB)
-//   Phase 6 adds file storage to this same stack.
+//   Phase 6: file storage for resumes and cover letters (S3)
 //
 // Cognito concepts:
 //   - User pool: the directory of people who can sign in (just me).
@@ -122,6 +123,33 @@ export class BackendStack extends Stack {
       removalPolicy: RemovalPolicy.RETAIN,
     })
 
+    // ---------------------------------------------------------------- Phase 6
+
+    // S3: private storage for resumes and cover letters. Nobody can reach a
+    // file without a 5-minute presigned link from the API (see lambda/documents.ts).
+    const documentsBucket = new s3.Bucket(this, 'DocumentsBucket', {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      enforceSSL: true,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      // My real files: keep the bucket even if the stack is deleted.
+      removalPolicy: RemovalPolicy.RETAIN,
+      lifecycleRules: [
+        // Uploads land in pending/ first; ones never attached (tab closed
+        // mid-upload) are deleted automatically after a day.
+        { id: 'expire-abandoned-uploads', prefix: 'pending/', expiration: Duration.days(1) },
+      ],
+      // The browser talks to S3 directly (upload, and fetching .docx files for
+      // the in-app preview), so S3 must allow my site's address (CORS).
+      cors: [
+        {
+          allowedOrigins: [props.siteUrl, LOCAL_DEV_URL],
+          allowedMethods: [s3.HttpMethods.GET, s3.HttpMethods.POST],
+          allowedHeaders: ['*'],
+          maxAge: 3600,
+        },
+      ],
+    })
+
     // Lambda: the code that runs for each API request (lambda/api.ts).
     // NodejsFunction bundles the TypeScript into one small JavaScript file
     // with esbuild during `cdk deploy`.
@@ -134,8 +162,10 @@ export class BackendStack extends Stack {
       architecture: lambda.Architecture.ARM_64,
       memorySize: 256,
       timeout: Duration.seconds(10),
-      environment: { TABLE_NAME: table.tableName },
-      bundling: { minify: true, sourceMap: true },
+      environment: { TABLE_NAME: table.tableName, BUCKET_NAME: documentsBucket.bucketName },
+      // externalModules: [] bundles the AWS SDK into the function too (the
+      // presigning helpers aren't built into Lambda), pinning exact versions.
+      bundling: { minify: true, sourceMap: true, externalModules: [] },
       // Logs (console.log/console.error) go here and are deleted after a month.
       logGroup: new logs.LogGroup(this, 'ApiFunctionLogs', {
         logGroupName: '/aws/lambda/armoryapply-api',
@@ -143,8 +173,10 @@ export class BackendStack extends Stack {
         removalPolicy: RemovalPolicy.DESTROY,
       }),
     })
-    // Least privilege: this function may read/write THIS table and nothing else.
+    // Least privilege: this function may use THIS table and THIS bucket, nothing else.
+    // (Presigned links carry the function's permissions, so they're limited the same way.)
     table.grantReadWriteData(apiFunction)
+    documentsBucket.grantReadWrite(apiFunction)
 
     // API Gateway (HTTP API): the public front door to the function.
     const api = new HttpApi(this, 'Api', {
@@ -180,6 +212,10 @@ export class BackendStack extends Stack {
       [HttpMethod.POST, '/applications'],
       [HttpMethod.PUT, '/applications/{id}'],
       [HttpMethod.DELETE, '/applications/{id}'],
+      [HttpMethod.POST, '/applications/{id}/documents/{kind}/upload'],
+      [HttpMethod.PUT, '/applications/{id}/documents/{kind}'],
+      [HttpMethod.DELETE, '/applications/{id}/documents/{kind}'],
+      [HttpMethod.GET, '/documents/url'],
     ]
     for (const [method, path] of routes) {
       api.addRoutes({ path, methods: [method], integration, authorizer })
@@ -191,5 +227,6 @@ export class BackendStack extends Stack {
     new CfnOutput(this, 'UserPoolClientId', { value: client.userPoolClientId })
     new CfnOutput(this, 'LoginDomain', { value: `${domain.domainName}.auth.${this.region}.amazoncognito.com` })
     new CfnOutput(this, 'ApiUrl', { value: stage.url })
+    new CfnOutput(this, 'DocumentsBucketName', { value: documentsBucket.bucketName })
   }
 }

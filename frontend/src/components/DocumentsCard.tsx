@@ -113,15 +113,6 @@ function DocumentRow({ app, kind }: { app: JobApplication; kind: DocumentKind })
 
 export function DocumentsCard({ app }: { app: JobApplication }) {
   const { source } = useDataSource()
-  // TODO(Phase 6): remove once the real app can store files in S3.
-  if (source.mode === 'live') {
-    return (
-      <section className="card p-5">
-        <h2 className="text-sm font-semibold text-slate-900">Documents</h2>
-        <p className="mt-2 text-sm text-slate-500">Resume and cover letter uploads are coming soon.</p>
-      </section>
-    )
-  }
   return (
     <section className="card p-5">
       <h2 className="text-sm font-semibold text-slate-900">Documents</h2>

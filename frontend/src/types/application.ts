@@ -42,7 +42,7 @@ export interface Interview {
 export const DOCUMENT_KINDS = ['resume', 'coverLetter'] as const
 export type DocumentKind = (typeof DOCUMENT_KINDS)[number]
 
-/** A file attached to an application: in S3 (real app, Phase 6) or in browser memory (demo). */
+/** A file attached to an application: in S3 (real app) or in browser memory (demo). */
 export interface StoredFile {
   fileName: string
   /** Where the file lives. In S3 this is the object key, e.g. "users/<id>/<app-id>/resume/<uuid>". */

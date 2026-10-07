@@ -25,7 +25,7 @@ export interface DataSource {
   uploadDocument(applicationId: string, kind: DocumentKind, file: File): Promise<JobApplication>
   removeDocument(applicationId: string, kind: DocumentKind): Promise<JobApplication>
   /**
-   * A temporary link to a file. In Phase 6 this becomes an S3 "presigned URL"
+   * A temporary link to a file. In the real app this is an S3 "presigned URL"
    * that expires after a few minutes, so links can't be shared around.
    * `purpose` matters for S3: "download" asks S3 to send the file as an
    * attachment (save it), "view" asks it to display inline.

@@ -28,7 +28,7 @@ new SiteStack(app, 'ArmoryApply-Site', {
 
 new BackendStack(app, 'ArmoryApply-Backend', {
   env,
-  description: 'ArmoryApply private backend: sign-in (Cognito), API + database; files in Phase 6',
+  description: 'ArmoryApply private backend: sign-in (Cognito), API + database, resume files (S3)',
   siteUrl: SITE_URL,
 })
 

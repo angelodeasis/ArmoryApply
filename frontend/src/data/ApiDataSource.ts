@@ -1,4 +1,4 @@
-import type { ApplicationInput, JobApplication } from '../types/application'
+import type { ApplicationInput, DocumentKind, JobApplication, StoredFile } from '../types/application'
 import type { DataSource } from './DataSource'
 
 // The private app's "backend": real HTTPS calls to my API in AWS.
@@ -8,8 +8,9 @@ import type { DataSource } from './DataSource'
 // Every request carries my Cognito access token in the Authorization header.
 // API Gateway checks it and rejects the request before any of my code runs
 // if it's missing, expired, or fake.
-
-const PHASE_6 = 'Resume and cover letter uploads arrive in Phase 6.'
+//
+// Files go straight between the browser and S3 using short-lived "presigned"
+// links that the API hands out (see infra/lambda/documents.ts).
 
 export class ApiDataSource implements DataSource {
   readonly mode = 'live' as const
@@ -42,16 +43,36 @@ export class ApiDataSource implements DataSource {
     await this.request('DELETE', `/applications/${encodeURIComponent(id)}`)
   }
 
-  async uploadDocument(): Promise<JobApplication> {
-    throw new Error(PHASE_6)
+  async uploadDocument(applicationId: string, kind: DocumentKind, file: File): Promise<JobApplication> {
+    const docPath = `/applications/${encodeURIComponent(applicationId)}/documents/${kind}`
+
+    // 1. Ask the API for permission to upload (checks type + size, returns a 5-minute upload slip).
+    const slip = await this.request<{ url: string; fields: Record<string, string>; uploadKey: string }>(
+      'POST',
+      `${docPath}/upload`,
+      { fileName: file.name, size: file.size },
+    )
+
+    // 2. Upload the file straight to S3. The slip's fields (signature, policy,
+    //    Content-Type...) must come first; S3 requires the file to be last.
+    const form = new FormData()
+    Object.entries(slip.fields).forEach(([name, value]) => form.append(name, value))
+    form.append('file', file)
+    const upload = await fetch(slip.url, { method: 'POST', body: form })
+    if (!upload.ok) throw new Error(`Upload failed (${upload.status}). Please try again.`)
+
+    // 3. Tell the API it arrived, so it's attached to the application.
+    return this.request('PUT', docPath, { uploadKey: slip.uploadKey, fileName: file.name })
   }
 
-  async removeDocument(): Promise<JobApplication> {
-    throw new Error(PHASE_6)
+  removeDocument(applicationId: string, kind: DocumentKind): Promise<JobApplication> {
+    return this.request('DELETE', `/applications/${encodeURIComponent(applicationId)}/documents/${kind}`)
   }
 
-  async getDocumentUrl(): Promise<string> {
-    throw new Error(PHASE_6)
+  async getDocumentUrl(file: StoredFile, purpose: 'view' | 'download'): Promise<string> {
+    const query = new URLSearchParams({ key: file.key, purpose })
+    const { url } = await this.request<{ url: string }>('GET', `/documents/url?${query}`)
+    return url
   }
 
   /** Send one request and return the parsed JSON, or throw a readable error. */

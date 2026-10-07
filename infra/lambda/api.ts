@@ -1,15 +1,9 @@
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
-import {
-  DeleteCommand,
-  DynamoDBDocumentClient,
-  GetCommand,
-  PutCommand,
-  QueryCommand,
-  type QueryCommandOutput,
-} from '@aws-sdk/lib-dynamodb'
-import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
+import { DeleteCommand, GetCommand, PutCommand, QueryCommand, type QueryCommandOutput } from '@aws-sdk/lib-dynamodb'
+import type { APIGatewayProxyResultV2 } from 'aws-lambda'
 import { randomUUID } from 'node:crypto'
 import type { JobApplication } from '../../frontend/src/types/application'
+import { attachUpload, createUpload, deleteFilesOf, documentUrl, removeDocument } from './documents'
+import { appKey, db, json, pathId, readBody, TABLE, toApplication, userKey, type Event, type Item } from './shared'
 import { parseApplicationInput, ValidationError } from './validate'
 
 // The ArmoryApply API: one small Lambda function that handles every route.
@@ -29,51 +23,8 @@ import { parseApplicationInput, ValidationError } from './validate'
 //   pk (partition key) = "USER#<sub>"   → groups everything belonging to one user
 //   sk (sort key)      = "APP#<id>"     → one job application
 // "Give me all my applications" is then one Query on pk: fast and cheap.
-
-const TABLE = process.env.TABLE_NAME!
-const MAX_BODY_BYTES = 64 * 1024
-
-// Created once per Lambda "container" and reused across requests (faster).
-// removeUndefinedValues: optional fields that are empty are simply not stored.
-const db = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
-  marshallOptions: { removeUndefinedValues: true },
-})
-
-type Event = APIGatewayProxyEventV2WithJWTAuthorizer
-type Item = JobApplication & { pk: string; sk: string }
-
-const userKey = (sub: string) => `USER#${sub}`
-const appKey = (id: string) => `APP#${id}`
-
-function json(statusCode: number, body?: unknown): APIGatewayProxyResultV2 {
-  return {
-    statusCode,
-    headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
-    body: body === undefined ? '' : JSON.stringify(body),
-  }
-}
-
-/** Drop the database keys before sending a record to the browser. */
-function toApplication({ pk: _pk, sk: _sk, ...app }: Item): JobApplication {
-  return app
-}
-
-function readBody(event: Event): unknown {
-  const raw = event.isBase64Encoded ? Buffer.from(event.body ?? '', 'base64').toString('utf8') : (event.body ?? '')
-  if (Buffer.byteLength(raw) > MAX_BODY_BYTES) throw new ValidationError('Request is too large')
-  try {
-    return JSON.parse(raw)
-  } catch {
-    throw new ValidationError('Request body must be valid JSON')
-  }
-}
-
-/** Application IDs are UUIDs we generate; reject anything else early. */
-function pathId(event: Event): string {
-  const id = event.pathParameters?.id ?? ''
-  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ValidationError('Invalid application id')
-  return id
-}
+//
+// Files (resumes, cover letters) are handled in documents.ts.
 
 async function listApplications(sub: string) {
   const items: Item[] = []
@@ -132,7 +83,11 @@ async function updateApplication(sub: string, event: Event) {
 async function deleteApplication(sub: string, event: Event) {
   const id = pathId(event)
   // Deleting something that's already gone is fine: the result is the same.
-  await db.send(new DeleteCommand({ TableName: TABLE, Key: { pk: userKey(sub), sk: appKey(id) } }))
+  // ALL_OLD hands back what was deleted, so its files can be deleted too.
+  const { Attributes: deleted } = await db.send(
+    new DeleteCommand({ TableName: TABLE, Key: { pk: userKey(sub), sk: appKey(id) }, ReturnValues: 'ALL_OLD' }),
+  )
+  await deleteFilesOf(deleted as Item | undefined)
   return json(204)
 }
 
@@ -151,6 +106,14 @@ export async function handler(event: Event): Promise<APIGatewayProxyResultV2> {
         return await updateApplication(sub, event)
       case 'DELETE /applications/{id}':
         return await deleteApplication(sub, event)
+      case 'POST /applications/{id}/documents/{kind}/upload':
+        return await createUpload(sub, event)
+      case 'PUT /applications/{id}/documents/{kind}':
+        return await attachUpload(sub, event)
+      case 'DELETE /applications/{id}/documents/{kind}':
+        return await removeDocument(sub, event)
+      case 'GET /documents/url':
+        return await documentUrl(sub, event)
       default:
         return json(404, { message: 'Not found' })
     }

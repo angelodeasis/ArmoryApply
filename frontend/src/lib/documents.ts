@@ -7,7 +7,7 @@ export const DOCUMENT_LABEL: Record<DocumentKind, string> = {
 
 export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024 // 5 MB
 
-/** PDF and Word only. The real backend (Phase 6) enforces the same rules in S3. */
+/** PDF and Word only. The real backend enforces the same rules (infra/lambda/documents.ts). */
 export const ALLOWED_DOCUMENT_TYPES: Record<string, string> = {
   'application/pdf': 'PDF',
   'application/msword': 'Word',
