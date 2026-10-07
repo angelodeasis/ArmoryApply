@@ -69,6 +69,40 @@ function yearlyUsd(min: unknown, max: unknown, currency: unknown, perYear: boole
   return { salaryMin, salaryMax }
 }
 
+type Salary = { salaryMin?: number; salaryMax?: number }
+const hasSalary = (s: Salary) => s.salaryMin !== undefined || s.salaryMax !== undefined
+
+// A dollar range written in prose: "$192,000 to $216,000", "$160K – $200K", "$120,000-150,000".
+// (?<![A-Za-z]) skips other dollars like CA$ or A$.
+const RANGE =
+  /(?<![A-Za-z])\$\s?(\d[\d,]*(?:\.\d+)?)\s*([kK])?\s*(?:USD\s*)?(?:-|–|—|to|and)\s*(?:USD\s*)?\$?\s?(\d[\d,]*(?:\.\d+)?)\s*([kK])?/g
+const SALARY_WORDS = /salary|base pay|pay range|compensation|wage|annual|per year|\/yr/
+const NOT_YEARLY_USD = /hour|hourly|\/hr|\b(?:CAD|AUD|NZD|SGD|HKD|MXN)\b/i
+
+/**
+ * Many postings only state the salary in the description, e.g. Discord's
+ * "The US base salary range for this full-time position is $192,000 to $216,000".
+ * Finds the first dollar RANGE that has salary words just before it, isn't
+ * hourly or another currency, and is a plausible yearly amount.
+ */
+export function salaryFromText(raw: unknown): Salary {
+  // Descriptions are HTML, sometimes escaped twice (&amp;lt;p&amp;gt;): decoding twice handles both.
+  const text = cleanText(cleanText(raw, 200_000), 200_000) ?? ''
+  for (const m of text.matchAll(RANGE)) {
+    const before = text.slice(Math.max(0, m.index - 160), m.index).toLowerCase()
+    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 30)
+    if (!SALARY_WORDS.test(before) || NOT_YEARLY_USD.test(after) || /hourly/.test(before.slice(-60))) continue
+    const thousands = m[2] || m[4] // "$160–200K": a K on either number applies to both
+    const amount = (digits: string, k: string | undefined) => {
+      const n = Number(digits.replace(/,/g, ''))
+      return k || (thousands && n < 1000) ? n * 1000 : n
+    }
+    const salary = yearlyUsd(amount(m[1], m[2]), amount(m[3], m[4]), 'USD', true)
+    if (salary.salaryMin !== undefined && salary.salaryMax !== undefined && salary.salaryMin >= 10_000) return salary
+  }
+  return {}
+}
+
 // ---------------------------------------------------------------- 1. job board APIs
 
 async function fetchJson(url: string): Promise<Obj> {
@@ -85,7 +119,11 @@ async function fromGreenhouse(url: URL): Promise<ImportResult | null> {
   if (!m) return null
   const job = await fetchJson(`https://boards-api.greenhouse.io/v1/boards/${m[1]}/jobs/${m[2]}?pay_transparency=true`)
   const location = cleanText(isObj(job.location) ? job.location.name : undefined)
-  const pay = Array.isArray(job.pay_input_ranges) ? job.pay_input_ranges.find(isObj) : undefined
+  // Greenhouse's structured pay field: pick the first USD range (some jobs list GBP/EUR ranges first).
+  const pay = Array.isArray(job.pay_input_ranges)
+    ? job.pay_input_ranges.find((p) => isObj(p) && String(p.currency_type).toUpperCase() === 'USD')
+    : undefined
+  const structured: Salary = isObj(pay) ? yearlyUsd(Number(pay.min_cents) / 100, Number(pay.max_cents) / 100, 'USD', true) : {}
   return {
     source: 'greenhouse',
     job: {
@@ -94,9 +132,8 @@ async function fromGreenhouse(url: URL): Promise<ImportResult | null> {
       company: cleanText(job.company_name),
       location,
       workMode: workModeFrom(location),
-      ...(pay
-        ? yearlyUsd(Number(pay.min_cents) / 100, Number(pay.max_cents) / 100, pay.currency_type, true)
-        : {}),
+      // No structured pay? Many companies write it in the description instead.
+      ...(hasSalary(structured) ? structured : salaryFromText(job.content)),
     },
   }
 }
@@ -109,7 +146,10 @@ async function fromLever(url: URL): Promise<ImportResult | null> {
   const job = await fetchJson(`https://api.lever.co/v0/postings/${m[1]}/${m[2]}`)
   const categories = isObj(job.categories) ? job.categories : {}
   const location = cleanText(categories.location)
-  const salary = isObj(job.salaryRange) ? job.salaryRange : undefined
+  const range = isObj(job.salaryRange) ? job.salaryRange : undefined
+  const structured: Salary = range ? yearlyUsd(range.min, range.max, range.currency, range.interval === 'per-year-salary') : {}
+  const lists = Array.isArray(job.lists) ? job.lists.map((l) => (isObj(l) ? l.content : '')) : []
+  const descriptionText = [job.descriptionPlain, ...lists, job.additionalPlain].filter((t) => typeof t === 'string').join(' ')
   const workplace = typeof job.workplaceType === 'string' ? job.workplaceType : undefined
   return {
     source: 'lever',
@@ -120,7 +160,7 @@ async function fromLever(url: URL): Promise<ImportResult | null> {
       company: cleanText(m[1].replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())),
       location,
       workMode: workModeFrom(workplace === 'on-site' ? 'onsite' : workplace, location),
-      ...(salary ? yearlyUsd(salary.min, salary.max, salary.currency, salary.interval === 'per-year-salary') : {}),
+      ...(hasSalary(structured) ? structured : salaryFromText(descriptionText)),
     },
   }
 }
@@ -164,7 +204,7 @@ function fromJobPosting(posting: Obj, url: URL): ImportResult {
   const remote = posting.jobLocationType === 'TELECOMMUTE'
   const location = places.map(placeText).filter(Boolean).slice(0, 3).join(' · ') || (remote ? 'Remote' : undefined)
 
-  let salary = {}
+  let salary: Salary = {}
   const base = posting.baseSalary
   if (isObj(base)) {
     const value = isObj(base.value) ? base.value : { value: base.value }
@@ -180,7 +220,7 @@ function fromJobPosting(posting: Obj, url: URL): ImportResult {
       company: cleanText(isObj(org) ? org.name : org),
       location: cleanText(location),
       workMode: remote ? 'remote' : workModeFrom(location),
-      ...salary,
+      ...(hasSalary(salary) ? salary : salaryFromText(posting.description)),
     },
   }
 }
