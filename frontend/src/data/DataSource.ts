@@ -1,4 +1,5 @@
 import type { ApplicationInput, DocumentKind, JobApplication, StoredFile } from '../types/application'
+import type { ImportResult } from '../types/import'
 
 // The contract every data backend must fulfil. The UI only talks to this
 // interface, never to localStorage or AWS directly. That is what lets the
@@ -31,4 +32,10 @@ export interface DataSource {
    * attachment (save it), "view" asks it to display inline.
    */
   getDocumentUrl(file: StoredFile, purpose: 'view' | 'download'): Promise<string>
+
+  /**
+   * Read job details from a posting's link, to pre-fill the New application
+   * form. Saves nothing. The demo only knows a few sample links (no AWS calls).
+   */
+  importFromUrl(url: string): Promise<ImportResult>
 }

@@ -68,20 +68,31 @@ function RequireAuth({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!mustSignIn) return
-    void auth.signinRedirect({
-      // `state` rides along through Cognito and comes back after sign-in,
-      // so I land on the page I originally asked for.
-      state: { returnTo: location.pathname },
-      // "replace" swaps /app out of the browser history for Cognito's page,
-      // so Back on the sign-in page returns to where I came from (e.g. the
-      // landing page) instead of /app, which would just redirect again.
-      redirectMethod: 'replace',
-    })
+    const goToSignIn = () =>
+      auth.signinRedirect({
+        // `state` rides along through Cognito and comes back after sign-in,
+        // so I land on the page I originally asked for.
+        state: { returnTo: location.pathname },
+        // "replace" swaps /app out of the browser history for Cognito's page,
+        // so Back on the sign-in page returns to where I came from (e.g. the
+        // landing page) instead of /app, which would just redirect again.
+        redirectMethod: 'replace',
+      })
+    // Access tokens last 1 hour, but the refresh token lasts 7 days. If only the
+    // access token has expired (e.g. I come back after lunch), quietly swap the
+    // refresh token for a new one instead of making me sign in again.
+    if (auth.user?.refresh_token) {
+      auth.signinSilent().catch(() => goToSignIn())
+    } else {
+      void goToSignIn()
+    }
   }, [mustSignIn, auth, location.pathname])
 
   if (isSigningOut()) return <AuthMessage title="Signing out…" />
   if (auth.error) return <SignInProblem message={auth.error.message} returnTo={location.pathname} />
-  if (!auth.isAuthenticated) return <AuthMessage title="Redirecting to sign in…" />
+  if (!auth.isAuthenticated) {
+    return <AuthMessage title={auth.user?.refresh_token ? 'Signing you back in…' : 'Redirecting to sign in…'} />
+  }
   return children
 }
 

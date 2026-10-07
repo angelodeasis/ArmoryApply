@@ -1,4 +1,5 @@
 import type { ApplicationInput, DocumentKind, JobApplication, StoredFile } from '../types/application'
+import type { ImportResult } from '../types/import'
 import type { DataSource } from './DataSource'
 
 // The private app's "backend": real HTTPS calls to my API in AWS.
@@ -73,6 +74,10 @@ export class ApiDataSource implements DataSource {
     const query = new URLSearchParams({ key: file.key, purpose })
     const { url } = await this.request<{ url: string }>('GET', `/documents/url?${query}`)
     return url
+  }
+
+  importFromUrl(url: string): Promise<ImportResult> {
+    return this.request('POST', '/import', { url })
   }
 
   /** Send one request and return the parsed JSON, or throw a readable error. Also used by the Account page. */

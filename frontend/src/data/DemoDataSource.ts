@@ -1,7 +1,9 @@
 import { getDocument, withDocument } from '../lib/documents'
 import type { ApplicationInput, DocumentKind, JobApplication, StoredFile } from '../types/application'
+import type { ImportResult } from '../types/import'
 import type { DataSource } from './DataSource'
 import { buildSampleApplications } from './sampleData'
+import { SAMPLE_IMPORTS } from './sampleImports'
 
 // The public demo's "backend". Everything lives in the visitor's own browser
 // (localStorage), so demo visitors never cause a single AWS API call and can
@@ -119,6 +121,15 @@ export class DemoDataSource implements DataSource {
     const url = this.uploads.get(file.key)
     if (!url) throw new Error('Files uploaded in the demo are only kept until the page is refreshed.')
     return url
+  }
+
+  async importFromUrl(url: string): Promise<ImportResult> {
+    await wait(600) // feels like a real fetch
+    const sample = SAMPLE_IMPORTS.find((s) => s.result.job.jobUrl === url.trim())
+    if (!sample) {
+      throw new Error('The demo can only import the sample links below. In the private app, any job link works.')
+    }
+    return structuredClone(sample.result)
   }
 
   /** Demo-only: throw away the visitor's edits and restore the sample data. */

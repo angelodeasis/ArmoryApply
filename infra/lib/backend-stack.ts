@@ -204,7 +204,8 @@ export class BackendStack extends Stack {
       // Graviton (ARM) processors: ~20% cheaper than x86 for the same work.
       architecture: lambda.Architecture.ARM_64,
       memorySize: 256,
-      timeout: Duration.seconds(10),
+      // Import from link may wait up to ~7 s on someone else's website.
+      timeout: Duration.seconds(15),
       environment: {
         TABLE_NAME: table.tableName,
         BUCKET_NAME: documentsBucket.bucketName,
@@ -324,6 +325,7 @@ export class BackendStack extends Stack {
       [HttpMethod.POST, '/admin/users'],
       [HttpMethod.DELETE, '/admin/users/{username}'],
       [HttpMethod.DELETE, '/account'],
+      [HttpMethod.POST, '/import'],
     ]
     for (const [method, path] of routes) {
       api.addRoutes({ path, methods: [method], integration, authorizer })

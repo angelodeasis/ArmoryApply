@@ -27,7 +27,11 @@ if (!ALERT_EMAIL) {
   throw new Error('Set ALERT_EMAIL in infra/.env (where alarm emails go). See DEV_GUIDE.md.')
 }
 
-// CDK_DEFAULT_ACCOUNT comes from your current AWS login.
+// CDK_DEFAULT_ACCOUNT comes from your current AWS login. Without it, names
+// built from the account number break with confusing errors, so stop early.
+if (!process.env.CDK_DEFAULT_ACCOUNT) {
+  throw new Error('Not signed in to AWS (or the session expired). Run "aws login" in a regular terminal, then try again.')
+}
 const env = { account: process.env.CDK_DEFAULT_ACCOUNT, region: 'us-east-1' }
 
 const app = new App()

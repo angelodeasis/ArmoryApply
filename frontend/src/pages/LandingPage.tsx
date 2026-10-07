@@ -8,6 +8,10 @@ const FEATURES = [
   { title: 'Every detail in one place', body: 'Company, role, salary range, location, job link, resume version, and notes.' },
   { title: 'Interview timeline', body: 'Log each round and see what is coming up next on the dashboard.' },
   { title: 'Pipeline at a glance', body: 'See where every application stands, from wishlist to offer.' },
+  {
+    title: 'Import from a link',
+    body: 'Paste a Greenhouse, Lever, or careers-page link and the form fills itself in. Try it in the demo.',
+  },
 ]
 
 export function LandingPage() {
@@ -56,7 +60,7 @@ export function LandingPage() {
           </p>
         </section>
 
-        <section className="mt-20 grid gap-4 sm:grid-cols-3">
+        <section className="mt-20 grid gap-4 sm:grid-cols-2">
           {FEATURES.map((f) => (
             <div key={f.title} className="card p-5">
               <h2 className="font-semibold">{f.title}</h2>

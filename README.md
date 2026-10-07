@@ -13,6 +13,7 @@ infrastructure as code.
 - Track applications from wishlist to offer: company, role, status, salary range, location, job link, notes
 - Folders (multi-label, like Gmail labels), an interview timeline, and a pipeline dashboard
 - Attach a resume and cover letter to each application, and preview PDF and Word files in the app
+- **Import from link:** paste a Greenhouse, Lever, or careers-page link and the form fills itself in (the demo has sample links)
 - Invite-only accounts: an admin invites people, and each user sees only their own data
 - Users can delete their account, which erases their records, files, and login
 
@@ -64,6 +65,7 @@ flowchart LR
 | Bad input | Server-side validation with field allow-listing and length limits shared with the frontend. |
 | File uploads | Presigned POST policy enforces 1 byte–5 MB and an exact content type (PDF/Word), so S3 rejects tampered uploads itself. Uploads go to `pending/` (1-day lifecycle) and are promoted only after verification, which prevents orphaned files. |
 | File access | 5-minute presigned GET links, scoped to the caller's own prefix and checked against their record. |
+| Import from link (SSRF) | The server fetches user-supplied URLs only over https, on the default port, with no raw IPs. It resolves DNS itself, refuses private, loopback, link-local and metadata ranges, and connects only to the vetted address (no DNS rebinding). It re-checks every redirect (max 3) and enforces 7-second and 2 MB limits. LinkedIn and Indeed are refused (their terms forbid scraping). |
 | Least privilege | The Lambda role lists exactly the 10 DynamoDB and S3 actions and 5 Cognito actions it uses, each on one resource. |
 | Abuse and cost | API throttling (10 req/s, burst 20), a cap on the number of accounts, AWS Budgets alert, and alarms on errors, 4xx spikes, and traffic spikes. |
 | Browser hardening | Content-Security-Policy (`script-src 'self'`, allow-listed API/Cognito/S3 origins), HSTS, `X-Frame-Options`, `nosniff`, Permissions-Policy. |
@@ -84,7 +86,7 @@ API Gateway before Lambda runs.
 | `infra/bin/` | CDK entry point |
 | `infra/lib/site-stack.ts` | S3 + CloudFront + security headers |
 | `infra/lib/backend-stack.ts` | Cognito, DynamoDB, Lambda, API Gateway, documents bucket, alarms |
-| `infra/lambda/` | API handler: `api.ts` (routes), `documents.ts` (files), `accounts.ts` (invites, deletion), `validate.ts` |
+| `infra/lambda/` | API handler: `api.ts` (routes), `documents.ts` (files), `accounts.ts` (invites, deletion), `import.ts` + `safeFetch.ts` (import from link), `validate.ts` |
 | `infra/branding/` | Cognito Managed Login style and logo |
 
 ## Running it
@@ -114,6 +116,5 @@ After the first backend deploy, copy its outputs into `frontend/src/config.ts` a
 - [x] Resume and cover letter storage in S3 (presigned URLs)
 - [x] Invite-only accounts, account deletion, privacy page
 - [x] Hardening: alarms, access logs, least-privilege IAM, CSP, branded sign-in
-- [ ] **Import from link:** paste a job posting URL, and a Lambda extracts the details (schema.org JobPosting,
-      Greenhouse/Lever public APIs) into a pre-filled form, with SSRF protections
-- [ ] Optional: CI/CD with GitHub OIDC, custom domain
+- [x] Import from link: Greenhouse/Lever public APIs and schema.org JobPosting data, with SSRF protections
+- [ ] Optional: browser extension to import from LinkedIn/Indeed pages you're viewing, CI/CD with GitHub OIDC, custom domain

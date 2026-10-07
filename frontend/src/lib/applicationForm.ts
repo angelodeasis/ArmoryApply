@@ -4,6 +4,7 @@ import type {
   InterviewType,
   WorkMode,
 } from '../types/application'
+import type { ImportedJob } from '../types/import'
 
 // HTML inputs always give us strings ("135000", "2026-10-12T14:00"), while the
 // saved data uses numbers and ISO timestamps. So the form keeps its own
@@ -137,6 +138,27 @@ export function fromFormValues(
     })),
     notes: v.notes.trim(),
   }
+}
+
+/**
+ * Pre-fill the form from an imported job. Only fields the import actually
+ * found are changed; returns the new values and which fields were filled.
+ */
+export function applyImport(v: FormValues, job: ImportedJob): { values: FormValues; filled: (keyof FormValues)[] } {
+  const next: FormValues = { ...v, jobUrl: job.jobUrl }
+  const filled: (keyof FormValues)[] = ['jobUrl']
+  const put = <K extends keyof FormValues>(key: K, value: FormValues[K] | undefined) => {
+    if (value === undefined || value === '') return
+    next[key] = value
+    filled.push(key)
+  }
+  put('company', job.company)
+  put('position', job.position)
+  put('location', job.location)
+  put('workMode', job.workMode)
+  put('salaryMin', job.salaryMin?.toString())
+  put('salaryMax', job.salaryMax?.toString())
+  return { values: next, filled }
 }
 
 function isValidMoney(n: number | undefined): boolean {

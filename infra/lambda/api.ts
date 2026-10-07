@@ -3,6 +3,7 @@ import type { APIGatewayProxyResultV2 } from 'aws-lambda'
 import { randomUUID } from 'node:crypto'
 import type { JobApplication } from '../../frontend/src/types/application'
 import { deleteMyAccount, inviteUser, listUsers, removeUser } from './accounts'
+import { importFromUrl } from './import'
 import { attachUpload, createUpload, deleteFilesOf, documentUrl, removeDocument } from './documents'
 import { appKey, db, json, pathId, readBody, TABLE, toApplication, userKey, type Event, type Item } from './shared'
 import { parseApplicationInput, ValidationError } from './validate'
@@ -26,7 +27,7 @@ import { parseApplicationInput, ValidationError } from './validate'
 // "Give me all my applications" is then one Query on pk: fast and cheap.
 //
 // Files (resumes, cover letters) are handled in documents.ts,
-// invites and account deletion in accounts.ts.
+// invites and account deletion in accounts.ts, Import from link in import.ts.
 
 async function listApplications(sub: string) {
   const items: Item[] = []
@@ -125,6 +126,8 @@ export async function handler(event: Event): Promise<APIGatewayProxyResultV2> {
         return await removeUser(claims, event)
       case 'DELETE /account':
         return await deleteMyAccount(claims, sub)
+      case 'POST /import':
+        return await importFromUrl(event)
       default:
         return json(404, { message: 'Not found' })
     }

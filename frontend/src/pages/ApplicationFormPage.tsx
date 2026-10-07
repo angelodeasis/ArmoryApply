@@ -1,11 +1,13 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { FolderInput } from '../components/FolderInput'
+import { ImportFromLink } from '../components/ImportFromLink'
 import { InterviewsEditor } from '../components/InterviewsEditor'
 import { useApplications, useCreateApplication, useUpdateApplication } from '../data/queries'
 import { useDataSource } from '../data/useDataSource'
 import { allFolders } from '../lib/application'
 import {
+  applyImport,
   emptyFormValues,
   fromFormValues,
   LIMITS,
@@ -115,6 +117,18 @@ function ApplicationForm({ existing, allApps }: { existing?: JobApplication; all
           {existing ? `Edit ${existing.company}` : 'New application'}
         </h1>
       </div>
+
+      {/* Import only makes sense for a brand-new application. */}
+      {!existing && (
+        <ImportFromLink
+          onImported={({ job }) => {
+            const { values: next, filled } = applyImport(values, job)
+            setValues(next)
+            setErrors({})
+            return filled
+          }}
+        />
+      )}
 
       <FormSection title="The job">
         <div className="grid gap-5 sm:grid-cols-2">
