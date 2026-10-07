@@ -22,15 +22,6 @@ function CenteredMessage({ title, children }: { title: string; children: ReactNo
   )
 }
 
-// Placeholder until Cognito sign-in is added in Phase 4.
-export function PrivateAppPage() {
-  return (
-    <CenteredMessage title="Private app">
-      Sign-in is coming soon. The private app will be protected by Amazon Cognito.
-    </CenteredMessage>
-  )
-}
-
 export function NotFoundPage() {
   return <CenteredMessage title="Page not found">That page doesn't exist.</CenteredMessage>
 }

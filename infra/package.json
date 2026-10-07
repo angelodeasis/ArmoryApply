@@ -8,7 +8,8 @@
     "synth": "cdk synth",
     "diff": "cdk diff",
     "build:frontend": "npm --prefix ../frontend run build",
-    "deploy": "npm run build:frontend && cdk deploy"
+    "deploy": "npm run build:frontend && cdk deploy ArmoryApply-Site",
+    "deploy:backend": "cdk deploy ArmoryApply-Backend"
   },
   "dependencies": {
     "aws-cdk-lib": "^2.272.0",

@@ -7,7 +7,8 @@ import { ApplicationFormPage } from './pages/ApplicationFormPage'
 import { ApplicationsPage } from './pages/ApplicationsPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { LandingPage } from './pages/LandingPage'
-import { NotFoundPage, PrivateAppPage } from './pages/SimplePages'
+import { NotFoundPage } from './pages/SimplePages'
+import { PrivateAppRoute } from './private/PrivateAppRoute'
 
 // URL -> page map. The /demo branch and (in Phase 4–5) the /app branch use
 // the SAME pages; only the DataSource handed to them differs.
@@ -31,6 +32,6 @@ export const router = createBrowserRouter([
       { path: 'new', element: <ApplicationFormPage /> },
     ],
   },
-  { path: '/app/*', element: <PrivateAppPage /> },
+  { path: '/app/*', element: <PrivateAppRoute /> },
   { path: '*', element: <NotFoundPage /> },
 ])
