@@ -2,6 +2,7 @@ import { DeleteCommand, GetCommand, PutCommand, QueryCommand, type QueryCommandO
 import type { APIGatewayProxyResultV2 } from 'aws-lambda'
 import { randomUUID } from 'node:crypto'
 import type { JobApplication } from '../../frontend/src/types/application'
+import { deleteMyAccount, inviteUser, listUsers, removeUser } from './accounts'
 import { attachUpload, createUpload, deleteFilesOf, documentUrl, removeDocument } from './documents'
 import { appKey, db, json, pathId, readBody, TABLE, toApplication, userKey, type Event, type Item } from './shared'
 import { parseApplicationInput, ValidationError } from './validate'
@@ -24,7 +25,8 @@ import { parseApplicationInput, ValidationError } from './validate'
 //   sk (sort key)      = "APP#<id>"     → one job application
 // "Give me all my applications" is then one Query on pk: fast and cheap.
 //
-// Files (resumes, cover letters) are handled in documents.ts.
+// Files (resumes, cover letters) are handled in documents.ts,
+// invites and account deletion in accounts.ts.
 
 async function listApplications(sub: string) {
   const items: Item[] = []
@@ -93,7 +95,8 @@ async function deleteApplication(sub: string, event: Event) {
 
 export async function handler(event: Event): Promise<APIGatewayProxyResultV2> {
   // "sub" = the user's permanent Cognito ID, taken from the verified token.
-  const sub = event.requestContext.authorizer.jwt.claims.sub
+  const claims = event.requestContext.authorizer.jwt.claims
+  const sub = claims.sub
   if (typeof sub !== 'string' || !sub) return json(401, { message: 'Not signed in' })
 
   try {
@@ -114,6 +117,14 @@ export async function handler(event: Event): Promise<APIGatewayProxyResultV2> {
         return await removeDocument(sub, event)
       case 'GET /documents/url':
         return await documentUrl(sub, event)
+      case 'GET /admin/users':
+        return await listUsers(claims)
+      case 'POST /admin/users':
+        return await inviteUser(claims, event)
+      case 'DELETE /admin/users/{username}':
+        return await removeUser(claims, event)
+      case 'DELETE /account':
+        return await deleteMyAccount(claims, sub)
       default:
         return json(404, { message: 'Not found' })
     }

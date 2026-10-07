@@ -58,10 +58,21 @@ export class BackendStack extends Stack {
       mfa: cognito.Mfa.REQUIRED,
       mfaSecondFactor: { otp: true, sms: false },
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
+      // The invite email. Cognito fills in {username} (their email) and {####}
+      // (a temporary password that expires after 3 days).
       userInvitation: {
-        emailSubject: 'Your ArmoryApply account',
-        emailBody:
-          'Your ArmoryApply login is {username} with temporary password {####} . You will be asked to choose a new password and set up an authenticator app.',
+        emailSubject: "You're invited to ArmoryApply",
+        emailBody: [
+          "You've been invited to ArmoryApply, a private job application tracker.",
+          '',
+          `Sign in at: ${props.siteUrl}/app`,
+          'Email: {username}',
+          'Temporary password: {####}',
+          '',
+          "The temporary password expires in 3 days. When you first sign in, you'll choose your own password and set up an authenticator app (like Google Authenticator) for a 6-digit code.",
+          '',
+          `What's stored and who can see it: ${props.siteUrl}/privacy`,
+        ].join('<br>'),
       },
       // My account must never be deleted by accident: block deletion in
       // the console/API, and keep it even if this stack is deleted.
@@ -71,6 +82,14 @@ export class BackendStack extends Stack {
 
     // Where the sign-in page lives: https://<prefix>.auth.us-east-1.amazoncognito.com
     // The prefix must be unique across AWS in this region.
+    // Admins can invite and remove people from inside the app (lambda/accounts.ts).
+    // Membership shows up in the access token as "cognito:groups".
+    new cognito.CfnUserPoolGroup(this, 'AdminsGroup', {
+      userPoolId: userPool.userPoolId,
+      groupName: 'admins',
+      description: 'Can invite and remove ArmoryApply users',
+    })
+
     const domain = userPool.addDomain('LoginDomain', {
       cognitoDomain: { domainPrefix: `armoryapply-${this.account.slice(-6)}` },
       managedLoginVersion: cognito.ManagedLoginVersion.NEWER_MANAGED_LOGIN,
@@ -162,7 +181,12 @@ export class BackendStack extends Stack {
       architecture: lambda.Architecture.ARM_64,
       memorySize: 256,
       timeout: Duration.seconds(10),
-      environment: { TABLE_NAME: table.tableName, BUCKET_NAME: documentsBucket.bucketName },
+      environment: {
+        TABLE_NAME: table.tableName,
+        BUCKET_NAME: documentsBucket.bucketName,
+        USER_POOL_ID: userPool.userPoolId,
+        MAX_USERS: '20',
+      },
       // externalModules: [] bundles the AWS SDK into the function too (the
       // presigning helpers aren't built into Lambda), pinning exact versions.
       bundling: { minify: true, sourceMap: true, externalModules: [] },
@@ -177,6 +201,15 @@ export class BackendStack extends Stack {
     // (Presigned links carry the function's permissions, so they're limited the same way.)
     table.grantReadWriteData(apiFunction)
     documentsBucket.grantReadWrite(apiFunction)
+    // ...and manage users in MY user pool: only the five actions invites and deletion need.
+    userPool.grant(
+      apiFunction,
+      'cognito-idp:AdminCreateUser',
+      'cognito-idp:AdminGetUser',
+      'cognito-idp:AdminDeleteUser',
+      'cognito-idp:ListUsers',
+      'cognito-idp:ListUsersInGroup',
+    )
 
     // API Gateway (HTTP API): the public front door to the function.
     const api = new HttpApi(this, 'Api', {
@@ -216,6 +249,10 @@ export class BackendStack extends Stack {
       [HttpMethod.PUT, '/applications/{id}/documents/{kind}'],
       [HttpMethod.DELETE, '/applications/{id}/documents/{kind}'],
       [HttpMethod.GET, '/documents/url'],
+      [HttpMethod.GET, '/admin/users'],
+      [HttpMethod.POST, '/admin/users'],
+      [HttpMethod.DELETE, '/admin/users/{username}'],
+      [HttpMethod.DELETE, '/account'],
     ]
     for (const [method, path] of routes) {
       api.addRoutes({ path, methods: [method], integration, authorizer })

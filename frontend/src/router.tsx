@@ -7,6 +7,7 @@ import { ApplicationFormPage } from './pages/ApplicationFormPage'
 import { ApplicationsPage } from './pages/ApplicationsPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { LandingPage } from './pages/LandingPage'
+import { PrivacyPage } from './pages/PrivacyPage'
 import { NotFoundPage } from './pages/SimplePages'
 import { PrivateAppRoute } from './private/PrivateAppRoute'
 
@@ -17,6 +18,7 @@ const demoSource = new DemoDataSource()
 
 export const router = createBrowserRouter([
   { path: '/', element: <LandingPage /> },
+  { path: '/privacy', element: <PrivacyPage /> },
   {
     path: '/demo',
     element: (

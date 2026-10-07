@@ -75,8 +75,8 @@ export class ApiDataSource implements DataSource {
     return url
   }
 
-  /** Send one request and return the parsed JSON, or throw a readable error. */
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  /** Send one request and return the parsed JSON, or throw a readable error. Also used by the Account page. */
+  async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const token = this.getToken()
     if (!token) throw new Error('You are signed out. Refresh the page to sign in again.')
 

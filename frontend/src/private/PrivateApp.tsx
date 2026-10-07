@@ -1,10 +1,8 @@
-import { User } from 'oidc-client-ts'
 import { useEffect, type ReactNode } from 'react'
 import { AuthProvider, useAuth } from 'react-oidc-context'
 import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router'
 import { Logo } from '../components/Logo'
-import { apiConfig, authConfig, isAuthConfigured } from '../config'
-import { ApiDataSource } from '../data/ApiDataSource'
+import { apiConfig, isAuthConfigured } from '../config'
 import { DataSourceProvider } from '../data/DataSourceContext'
 import { AppLayout } from '../layouts/AppLayout'
 import { ApplicationDetailPage } from '../pages/ApplicationDetailPage'
@@ -12,6 +10,7 @@ import { ApplicationFormPage } from '../pages/ApplicationFormPage'
 import { ApplicationsPage } from '../pages/ApplicationsPage'
 import { DashboardPage } from '../pages/DashboardPage'
 import { AccountPage } from './AccountPage'
+import { apiSource, oidcConfig } from './session'
 import { isSigningOut, signOut } from './signOut'
 
 // Everything under /app. This file (and the sign-in libraries) is split into
@@ -25,29 +24,6 @@ import { isSigningOut, signOut } from './signOut'
 //   4. The library swaps that code for tokens, proving it started step 1
 //      (that proof is PKCE, which stops a stolen code from being used).
 //   5. Tokens are kept in this tab's sessionStorage and refreshed quietly.
-
-const oidcConfig = {
-  authority: `https://cognito-idp.${authConfig.region}.amazonaws.com/${authConfig.userPoolId}`,
-  client_id: authConfig.clientId,
-  redirect_uri: `${window.location.origin}/app/callback`,
-  post_logout_redirect_uri: `${window.location.origin}/`,
-  response_type: 'code',
-  scope: 'openid email profile',
-  automaticSilentRenew: true,
-  // After the callback, remove ?code=... from the address bar.
-  onSigninCallback: () => window.history.replaceState({}, document.title, window.location.pathname),
-}
-
-// The tokens live in this tab's sessionStorage under this key (the library's
-// naming). Reading them at request time means the API always gets the latest
-// token, even right after a background refresh.
-function getAccessToken(): string | undefined {
-  const stored = sessionStorage.getItem(`oidc.user:${oidcConfig.authority}:${oidcConfig.client_id}`)
-  return stored ? User.fromStorageString(stored).access_token : undefined
-}
-
-// Same pages as the demo; only the data source differs (see router.tsx).
-const apiSource = new ApiDataSource(apiConfig.url, getAccessToken)
 
 function AuthMessage({ title, children }: { title: string; children?: ReactNode }) {
   return (

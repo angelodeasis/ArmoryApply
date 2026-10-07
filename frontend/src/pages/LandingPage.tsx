@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
 import { Logo } from '../components/Logo'
+import { signedInEmail } from '../lib/signedIn'
 
 const STACK = ['React', 'TypeScript', 'AWS Lambda', 'API Gateway', 'DynamoDB', 'Cognito', 'S3', 'CloudFront', 'AWS CDK']
 
@@ -10,6 +11,9 @@ const FEATURES = [
 ]
 
 export function LandingPage() {
+  // Read once per visit; signing in or out always reloads this page anyway.
+  const email = signedInEmail()
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-50 via-white to-white text-slate-900">
       <header className="mx-auto flex max-w-5xl items-center justify-between px-4 py-5">
@@ -17,9 +21,18 @@ export function LandingPage() {
           <Logo />
           ArmoryApply
         </span>
-        <Link to="/app" className="text-sm font-medium text-slate-600 hover:text-slate-900">
-          Sign in
-        </Link>
+        {email ? (
+          <Link to="/app" className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900">
+            <span className="size-2 rounded-full bg-emerald-500" aria-hidden="true" />
+            <span>
+              Signed in as <span className="font-medium text-slate-900">{email}</span>
+            </span>
+          </Link>
+        ) : (
+          <Link to="/app" className="text-sm font-medium text-slate-600 hover:text-slate-900">
+            Sign in
+          </Link>
+        )}
       </header>
 
       <main className="mx-auto max-w-5xl px-4 pt-16 pb-24">
@@ -35,7 +48,7 @@ export function LandingPage() {
               Try the demo
             </Link>
             <Link to="/app" className="btn btn-secondary px-5 py-2.5 text-base">
-              Sign in
+              {email ? 'Open my tracker' : 'Sign in'}
             </Link>
           </div>
           <p className="mt-4 text-sm text-slate-500">
@@ -63,6 +76,12 @@ export function LandingPage() {
           </ul>
         </section>
       </main>
+
+      <footer className="mx-auto max-w-5xl px-4 pb-10 text-center text-sm text-slate-500">
+        <Link to="/privacy" className="hover:text-slate-900 hover:underline">
+          Privacy
+        </Link>
+      </footer>
     </div>
   )
 }
