@@ -15,6 +15,14 @@ function navClass({ isActive }: { isActive: boolean }) {
   }`
 }
 
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 20 20" className="size-5 fill-current sm:size-4" aria-hidden="true">
+      <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+    </svg>
+  )
+}
+
 function DemoBanner({ source }: { source: DemoDataSource }) {
   const resetCache = useResetCache()
   return (
@@ -49,10 +57,12 @@ export function AppLayout({ account }: { account?: ReactNode }) {
       {source instanceof DemoDataSource && <DemoBanner source={source} />}
 
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-          <Link to="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+        {/* One row at every size: on phones the name, the "New application"
+            label, and my email shrink to icons (sm: = 640px and wider). */}
+        <div className="mx-auto flex max-w-6xl items-center gap-x-3 px-4 py-3 sm:gap-x-6">
+          <Link to="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight" aria-label="ArmoryApply home">
             <Logo />
-            ArmoryApply
+            <span className="hidden sm:inline">ArmoryApply</span>
           </Link>
           <nav className="flex gap-1 text-sm">
             <NavLink end to={basePath} className={navClass}>
@@ -62,9 +72,15 @@ export function AppLayout({ account }: { account?: ReactNode }) {
               Applications
             </NavLink>
           </nav>
-          <div className="ml-auto flex items-center gap-3">
-            <Link to={`${basePath}/new`} className="btn btn-primary">
-              + New application
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            <Link
+              to={`${basePath}/new`}
+              className="btn btn-primary size-9 px-0 sm:size-auto sm:px-3.5"
+              aria-label="New application"
+              title="New application"
+            >
+              <PlusIcon />
+              <span className="hidden sm:inline">New application</span>
             </Link>
             {account}
           </div>

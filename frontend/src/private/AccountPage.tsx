@@ -234,12 +234,18 @@ export function AccountPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Account</h1>
-        <p className="mt-1 text-slate-600">
-          Signed in as <span className="font-medium text-slate-900">{String(profile.email ?? '')}</span>, verified by
-          Cognito with your password and authenticator code.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight">Account</h1>
+          <p className="mt-1 text-slate-600">
+            Signed in as <span className="font-medium break-all text-slate-900">{String(profile.email ?? '')}</span>,
+            verified by Cognito with your password and authenticator code.
+          </p>
+        </div>
+        {/* On phones the header has no room for Sign out, so it lives here. */}
+        <button type="button" className="btn btn-secondary sm:hidden" onClick={() => void signOut(auth)}>
+          Sign out
+        </button>
       </div>
 
       {isAdmin ? <InvitePeople /> : null}

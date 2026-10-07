@@ -106,24 +106,33 @@ function AuthCallback() {
   return <Navigate to={returnTo} replace />
 }
 
-/** Header extras for the private app: Account link + Sign out. */
+/** Header extras for the private app: Account link + Sign out (on phones: an icon, and Sign out lives on the Account page). */
 function AccountMenu() {
   const auth = useAuth()
+  const email = String(auth.user?.profile.email ?? 'Account')
   return (
     <>
-      {/* Phones show a short "Account"; wider screens show my email. Same link. */}
       <NavLink
         to="/app/account"
-        className="text-sm font-medium text-slate-600 hover:text-slate-900"
+        className="flex size-9 items-center justify-center rounded-full text-slate-500 ring-1 ring-slate-300 hover:bg-slate-50 hover:text-slate-900 sm:size-auto sm:rounded-none sm:text-sm sm:text-slate-600 sm:ring-0 sm:hover:bg-transparent"
+        aria-label={`Account (${email})`}
         title="Account"
       >
-        <span className="sm:hidden">Account</span>
-        <span className="hidden sm:inline">{String(auth.user?.profile.email ?? 'Account')}</span>
+        <UserIcon />
+        <span className="hidden sm:inline">{email}</span>
       </NavLink>
-      <button type="button" className="btn btn-secondary" onClick={() => void signOut(auth)}>
+      <button type="button" className="btn btn-secondary hidden sm:inline-flex" onClick={() => void signOut(auth)}>
         Sign out
       </button>
     </>
+  )
+}
+
+function UserIcon() {
+  return (
+    <svg viewBox="0 0 20 20" className="size-5 fill-current sm:hidden" aria-hidden="true">
+      <path d="M10 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3.465 14.493a1.23 1.23 0 0 0 .41 1.412A9.957 9.957 0 0 0 10 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 0 0-13.074.003Z" />
+    </svg>
   )
 }
 
